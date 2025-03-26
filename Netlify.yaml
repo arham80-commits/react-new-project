@@ -1,0 +1,66 @@
+name: Netlify Deployment
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        persist-credentials: true
+        fetch-depth: 0  # Required for pushing commits back
+
+    - name: Deploy to Netlify
+      id: deploy
+      env:
+        NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # First deployment attempt
+        response=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $NETLIFY_TOKEN" \
+          -d '{
+            "siteName": "hello yellow red purple green",
+            "repoUrl": "https://github.com/arham80-commits/react-new-project",
+            "branchName": "main",
+            "buildCommand": "npm run build",
+            "publishDir": "dist",
+            "functions_dir": "functions",
+            "snippets": {
+              "title": "Custom Analytics Script",
+              "general": "<script>console.log(''Analytics loaded'');</script>",
+              "general_position": "head",
+              "goal": "<meta name=''description'' content=''iPhone 16 Pro Max''>",
+              "goal_position": "body"
+            }
+          }' \
+          "http://your-api-endpoint.com/deploy-to-netlify/")
+
+        echo "API Response: $response"
+        
+        if echo "$response" | grep -q '"status": "success"'; then
+          echo "status=success" >> $GITHUB_OUTPUT
+          exit 0
+        else
+          echo "status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Retry Deployment
+      if: steps.deploy.outputs.status == 'failed'
+      run: |
+        echo "Waiting 3 minutes before retry..."
+        sleep 180
+        
+        echo "Creating retry commit"
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git commit --allow-empty -m "Retry Netlify deployment [skip ci]"
+        
+        echo "Pushing commit to trigger new build"
+        git push origin main
